@@ -1,2 +1,10 @@
+github.com/itchyny/maze v0.0.8 h1:y45uIzOaS4aXKipHqaJewBa6fuyVn6jrcJns439XTIM=
+github.com/itchyny/maze v0.0.8/go.mod h1:fPfIP3DdSomiBoEBrTHnrA1bmmZjilZ3kL2GTuLzSXk=
 github.com/otiai10/openaigo v1.0.0 h1:E4SoShWjMVltBAkM4/QsxGPhPKZlpKp0GSK6Ov1MSOg=
 github.com/otiai10/openaigo v1.0.0/go.mod h1:792bx6AWTS61weDi2EzKpHHnTF4eDMAlJ5GvAk/mgPg=
+github.com/satetsu888/minecraft-rcon-builder v0.0.0-20221027084159-2285a6e9618c h1:EDMxL86qGSVlYUAgff4/nSrslcLq77DqmVQQc0xE9uI=
+github.com/satetsu888/minecraft-rcon-builder v0.0.0-20221027084159-2285a6e9618c/go.mod h1:muCsms5pIXbSn/AmC1LEGuxwgLkvZulJyswZrIrbDEU=
+github.com/willroberts/minecraft-client v1.1.1-0.20220812161436-f4880f9efcd0 h1:a3T6iNqPjsVAF8z5jeois6A65pIJSbj5yLlxUk29hjk=
+github.com/willroberts/minecraft-client v1.1.1-0.20220812161436-f4880f9efcd0/go.mod h1:MmYKZngnRArEn8SzI6zUIq/X4x/z/kttjHgaPmwRCcE=
+golang.org/x/sync v0.0.0-20220907140024-f12130a52804 h1:0SH2R3f1b1VmIMG7BXbEZCBUu2dKmHschSmjqGUrW8A=
+golang.org/x/sync v0.0.0-20220907140024-f12130a52804/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=

@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/otiai10/openaigo"
+	rconClient "github.com/satetsu888/minecraft-rcon-builder/client"
+	"github.com/satetsu888/minecraft-rcon-builder/model"
 )
 
 type requestBody struct {
@@ -26,36 +28,38 @@ type Pos struct {
 }
 
 var systemContent = `
-Assistant is a great Minecraft builder and knowledgeable about Minecraft commands.
+The assistant possesses great Minecraft building skills and extensive knowledge of Minecraft commands.
+The player is currently playing Minecraft Java Edition.
+In Minecraft, the negative X-axis corresponds to facing west, while the positive X-axis corresponds to facing east.
+Similarly, facing north corresponds to the negative Z-axis, and facing south corresponds to the positive Z-axis.
+Position is specified as X, Y, Z order.
 
-Assistant can respond some commands and a description message.
-commands is valid minecraft command.
-Assistant response example format is always as follows:
+The assistant is capable of responding to certain commands and providing a description message.
+These commands will execute in the Minecraft world with operator privileges.
+The assistant's response follows a specific format, as demonstrated below:
 
 ` + "```" + `
-/setblock ~ ~ ~ minecraft:stone
-/fill ~ ~ ~ ~ ~ ~ minecraft:stone
+/setblock 100 64 120 minecraft:oak_planks
+/fill 110 64 130 150 67 170 minecraft:oak_planks
 ` + "```" + `
 
-Place a stone block at your feet.
+To place some oak planks blocks.
 `
 
 func userContent(playerPosition Pos, facing string, message string) string {
 	return `
-ユーザの現在位置は ` + fmt.Sprintf("(%d, %d, %d)", playerPosition.X, playerPosition.Y, playerPosition.Z) + `で` + facing + `を向いています。
-以下の建造物を作るコマンドを教えてください
+ユーザの現在位置は ` + fmt.Sprintf("(X: %d, Y: %d, Z: %d)", playerPosition.X, playerPosition.Y, playerPosition.Z) + `で` + facing + `を向いています。
+以下の内容を実行するコマンドを教えてください
 
 	` + message
 }
 
-func buildOpenAIRequest(message string) openaigo.ChatCompletionRequestBody {
-	pos := Pos{X: -102, Y: 124, Z: -19}
-
+func buildOpenAIRequest(pos Pos, facing string, message string) openaigo.ChatCompletionRequestBody {
 	return openaigo.ChatCompletionRequestBody{
 		Model: "gpt-3.5-turbo",
 		Messages: []openaigo.ChatMessage{
 			{Role: "system", Content: systemContent},
-			{Role: "user", Content: userContent(pos, "north", message)},
+			{Role: "user", Content: userContent(pos, facing, message)},
 		},
 	}
 }
@@ -101,11 +105,27 @@ func parseOpenAIResponse(response openaigo.ChatCompletionResponse) (string, stri
 	descriptionRegexp := regexp.MustCompile("(?s)```([^`]+?)\\z")
 	descriptionResult := descriptionRegexp.FindStringSubmatch(content)
 
-	return strings.Join(commands, "\n"), descriptionResult[1]
+	description := ""
+	if len(descriptionResult) < 1 {
+		description = ""
+	} else {
+		description = descriptionResult[1]
+	}
+
+	return strings.Join(commands, "\n"), description
 }
 
 func buildHandler(ctx context.Context) http.HandlerFunc {
-	client := openaigo.NewClient(os.Getenv("OPENAI_API_KEY"))
+
+	rconHostPort := os.Getenv("RCON_HOSTPORT")
+	rconPassowrd := os.Getenv("RCON_PASSWORD")
+
+	rconClient, err := rconClient.NewClient(rconHostPort, rconPassowrd)
+	if err != nil {
+		panic(err)
+	}
+
+	openAIClient := openaigo.NewClient(os.Getenv("OPENAI_API_KEY"))
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		requestBody, err := parseHTTPReq(r)
@@ -114,20 +134,71 @@ func buildHandler(ctx context.Context) http.HandlerFunc {
 			return
 		}
 
-		request := buildOpenAIRequest(requestBody.Message)
-		response, err := client.Chat(ctx, request)
+		_, _, list, err := rconClient.FetchPlayerList()
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Println(err)
 			return
 		}
-		fmt.Printf("all: %v ¥n¥n ", response)
+
+		player := model.Player{}
+
+		for i, playerName := range list {
+			if playerName == requestBody.PlayerName {
+				fmt.Printf("player found: %v\n", playerName)
+				fetchedPlayer, err := rconClient.FetchPlayer(list[i])
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					fmt.Println(err)
+					return
+				}
+				player = fetchedPlayer
+				fmt.Println(player)
+				break
+			}
+		}
+
+		if player.Name == "" {
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "player not found: %v", requestBody.PlayerName)
+			return
+		}
+
+		pos := Pos{player.Position().X, player.Position().Y, player.Position().Z}
+		fmt.Println(pos)
+		facing := string(player.Direction())
+		fmt.Println(facing)
+
+		request := buildOpenAIRequest(pos, facing, requestBody.Message)
+		response, err := openAIClient.Chat(ctx, request)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Println(err)
+			return
+		}
 
 		mcCode, description := parseOpenAIResponse(response)
 
-		fmt.Println(mcCode)
+		for _, command := range strings.Split(mcCode, "\n") {
+			cmd := ""
+			if len(command) > 0 && command[0:1] == "/" {
+				cmd = command[1:]
+			} else {
+				cmd = command
+			}
+			executeCmd := fmt.Sprintf("execute at %s as %s run %s", player.Name, player.Name, cmd)
+			fmt.Println("sending command: " + executeCmd)
+			msg, err := rconClient.Client.SendCommand(executeCmd)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Println(err)
+				return
+			}
+			fmt.Println(msg)
+		}
+
 		fmt.Println(description)
-		fmt.Fprintf(w, "%v", description)
+		fmt.Fprintf(w, "%v", response)
 	}
 }
 
@@ -135,6 +206,7 @@ func main() {
 	ctx := context.Background()
 
 	http.HandleFunc("/", buildHandler(ctx))
+	fmt.Println("start server")
 	err := http.ListenAndServe(":8000", nil)
 	if err != nil {
 		fmt.Println(err)
