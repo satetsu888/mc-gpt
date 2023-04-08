@@ -169,6 +169,9 @@ func buildHandler(ctx context.Context) http.HandlerFunc {
 		facing := string(player.Direction())
 		fmt.Println(facing)
 
+		rconClient.Client.SendCommand(fmt.Sprintf("say 「%s」の処理中です", requestBody.Message))
+		defer rconClient.Client.SendCommand(fmt.Sprintf("say 「%s」の処理が完了しました", requestBody.Message))
+
 		request := buildOpenAIRequest(pos, facing, requestBody.Message)
 		response, err := openAIClient.Chat(ctx, request)
 		if err != nil {
